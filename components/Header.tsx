@@ -5,9 +5,10 @@ interface HeaderProps {
   activeCategory: NewsCategory;
   onCategoryChange: (cat: NewsCategory) => void;
   onSearch: (query: string) => void;
+  onLogoClick: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ activeCategory, onCategoryChange, onSearch }) => {
+const Header: React.FC<HeaderProps> = ({ activeCategory, onCategoryChange, onSearch, onLogoClick }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -48,7 +49,7 @@ const Header: React.FC<HeaderProps> = ({ activeCategory, onCategoryChange, onSea
                   <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
                 </button>
                 <div 
-                  onClick={() => onCategoryChange(NewsCategory.ALL)}
+                  onClick={onLogoClick}
                   className="cursor-pointer text-center md:text-left group"
                 >
                   <h1 className="text-3xl md:text-5xl font-serif font-black tracking-tighter text-gray-900 group-hover:text-brand-red transition-colors leading-none">

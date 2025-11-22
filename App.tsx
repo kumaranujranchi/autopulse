@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Header from './components/Header';
 import HeroSection from './components/HeroSection';
 import SectionHeader from './components/SectionHeader';
 import NewsGrid from './components/NewsGrid';
 import NewsList from './components/NewsList';
 import Sidebar from './components/Sidebar';
-import ArticlePage from './components/ArticlePage'; // New Import
+import ArticlePage from './components/ArticlePage';
 import SearchResultsModal from './components/SearchResultsModal';
 import { fetchNewsFeed } from './services/geminiService';
 import { Article, NewsCategory } from './types';
@@ -34,7 +34,7 @@ const generateDummyArticles = (category: string, count: number, startId: number)
   });
 };
 
-const TRENDING_DATA = generateDummyArticles("Trending", 4, 100);
+// Static launch data (Specific buckets)
 const CAR_LAUNCH_DATA = generateDummyArticles("New Car", 4, 200);
 const BIKE_LAUNCH_DATA = generateDummyArticles("New Bike", 4, 300);
 
@@ -46,12 +46,21 @@ const App: React.FC = () => {
   // View State
   const [currentView, setCurrentView] = useState<'home' | 'article'>('home');
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
-  
   const [searchQuery, setSearchQuery] = useState<string | null>(null);
 
-  // Initial load and category change for the MAIN feed (Latest News)
+  // Dynamic Content Helpers
+  const isAll = activeCategory === NewsCategory.ALL;
+  const isCars = activeCategory === NewsCategory.CARS;
+  const isBikes = activeCategory === NewsCategory.BIKES;
+
+  // Generate Trending data dynamically based on category
+  const trendingArticles = useMemo(() => {
+    const prefix = isAll ? 'Trending' : activeCategory;
+    return generateDummyArticles(prefix, 4, 100);
+  }, [activeCategory, isAll]);
+
+  // Initial load and category change
   useEffect(() => {
-    // When category changes, go back to home
     if (currentView === 'article') {
         setCurrentView('home');
         setSelectedArticle(null);
@@ -78,11 +87,18 @@ const App: React.FC = () => {
   };
 
   const heroArticle = articles.length > 0 ? articles[0] : null;
-  const latestNewsArticles = articles.length > 1 ? articles.slice(1) : [];
-  // Sidebar gets a mix of AI data + dummy data for fullness
-  const sidebarArticles = [...articles.slice(0, 2), ...TRENDING_DATA.slice(0, 3)]; 
-  // Combine all for recommendations
-  const allAvailableArticles = [...articles, ...TRENDING_DATA, ...CAR_LAUNCH_DATA];
+  // For Home: Grid gets slice(1). For Category: List gets slice(1) + specific launches
+  let latestNewsArticles = articles.length > 1 ? articles.slice(1) : [];
+
+  // If we are in specific categories, enrich the main feed with the static launch data
+  if (isCars) latestNewsArticles = [...latestNewsArticles, ...CAR_LAUNCH_DATA];
+  if (isBikes) latestNewsArticles = [...latestNewsArticles, ...BIKE_LAUNCH_DATA];
+  
+  // Sidebar content
+  const sidebarArticles = [...articles.slice(0, 2), ...trendingArticles.slice(0, 3)]; 
+  
+  // Combine all for recommendations in Article Page
+  const allAvailableArticles = [...articles, ...trendingArticles, ...CAR_LAUNCH_DATA, ...BIKE_LAUNCH_DATA];
 
   return (
     <div className="min-h-screen bg-white flex flex-col font-sans">
@@ -90,6 +106,10 @@ const App: React.FC = () => {
         activeCategory={activeCategory} 
         onCategoryChange={setActiveCategory}
         onSearch={setSearchQuery}
+        onLogoClick={() => {
+            setActiveCategory(NewsCategory.ALL);
+            handleBackToHome();
+        }}
       />
 
       <main className="flex-grow py-6 md:py-8">
@@ -102,96 +122,135 @@ const App: React.FC = () => {
             onArticleClick={handleArticleClick}
           />
         ) : (
-          // HOME VIEW
           <div className="container mx-auto px-4">
             {loading && articles.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-64 space-y-4">
                 <div className="w-12 h-12 border-4 border-brand-red border-t-transparent rounded-full animate-spin"></div>
-                <p className="text-gray-500 font-medium animate-pulse">Curating latest auto news...</p>
+                <p className="text-gray-500 font-medium animate-pulse">Curating latest {activeCategory} news...</p>
               </div>
             ) : (
-              <div className="flex flex-col lg:flex-row lg:space-x-8">
-                
-                {/* === Main Content Column (Left 75%) === */}
-                <div className="w-full lg:w-3/4">
-                  
-                  {/* 1. Hero Section */}
-                  {heroArticle && (
-                    <section className="mb-10">
-                      <HeroSection 
-                        article={heroArticle} 
-                        onClick={handleArticleClick} 
-                      />
-                    </section>
-                  )}
+              <>
+                {/* =================================================================================
+                    LAYOUT SWITCHER
+                    Home View: Grid Heavy, Horizontal Strips
+                    Category View: List Heavy (River), Dedicated Sidebar, Distinct Header
+                   ================================================================================= */}
 
-                  {/* 2. Trending News Strip */}
-                  <section className="mb-10">
-                    <SectionHeader title="Trending Now" />
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      {TRENDING_DATA.map((article) => (
-                        <div 
-                            key={article.id} 
-                            onClick={() => handleArticleClick(article)}
-                            className="group cursor-pointer"
-                        >
-                            <div className="overflow-hidden rounded-sm mb-2 aspect-[3/2]">
-                              <img 
-                                src={`https://picsum.photos/seed/${article.imageSeed}/300/200`} 
-                                alt={article.headline}
-                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                              />
+                {isAll ? (
+                  /* === HOME LAYOUT === */
+                  <div className="flex flex-col lg:flex-row lg:space-x-8">
+                    <div className="w-full lg:w-3/4">
+                      {/* 1. Hero */}
+                      {heroArticle && (
+                        <section className="mb-10">
+                          <HeroSection article={heroArticle} onClick={handleArticleClick} />
+                        </section>
+                      )}
+
+                      {/* 2. Horizontal Trending Strip */}
+                      <section className="mb-10">
+                        <SectionHeader title="Trending Now" />
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          {trendingArticles.map((article) => (
+                            <div key={article.id} onClick={() => handleArticleClick(article)} className="group cursor-pointer">
+                                <div className="overflow-hidden rounded-sm mb-2 aspect-[3/2]">
+                                  <img 
+                                    src={`https://picsum.photos/seed/${article.imageSeed}/300/200`} 
+                                    alt={article.headline}
+                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                                  />
+                                </div>
+                                <h4 className="text-sm font-bold font-serif leading-tight text-gray-900">
+                                  <span className="hover-underline-animation">{article.headline}</span>
+                                </h4>
                             </div>
-                            {/* Trending strip specific hover update */}
-                            <h4 className="text-sm font-bold font-serif leading-tight text-gray-900">
-                              <span className="hover-underline-animation">
-                                {article.headline}
-                              </span>
-                            </h4>
+                          ))}
                         </div>
-                      ))}
+                      </section>
+                      
+                      {/* 3. Grid for Latest News */}
+                      <section className="mb-12">
+                        <SectionHeader title="Latest News" />
+                        <NewsGrid articles={latestNewsArticles} onArticleClick={handleArticleClick} />
+                      </section>
+
+                      {/* 4. Split Launch Sections */}
+                      <section className="grid md:grid-cols-2 gap-8 border-t border-gray-200 pt-8">
+                          <div>
+                              <SectionHeader title="New Car Launches" />
+                              <NewsList articles={CAR_LAUNCH_DATA} onArticleClick={handleArticleClick} />
+                          </div>
+                          <div>
+                              <SectionHeader title="New Bike Launches" />
+                              <NewsList articles={BIKE_LAUNCH_DATA} onArticleClick={handleArticleClick} />
+                          </div>
+                      </section>
                     </div>
-                  </section>
+
+                    {/* Home Sidebar */}
+                    <div className="w-full lg:w-1/4 mt-10 lg:mt-0">
+                      <Sidebar articles={sidebarArticles} onArticleClick={handleArticleClick} />
+                    </div>
+                  </div>
+
+                ) : (
                   
-                  {/* 3. Latest News Grid */}
-                  <section className="mb-12">
-                    <SectionHeader title="Latest News" />
-                    <NewsGrid 
-                      articles={latestNewsArticles} 
-                      onArticleClick={handleArticleClick} 
-                    />
-                  </section>
-
-                  {/* 4. Split Section: New Car vs New Bike Launches */}
-                  <section className="grid md:grid-cols-2 gap-8 border-t border-gray-200 pt-8">
-                    {/* Left: New Car Launch */}
-                    <div>
-                      <SectionHeader title="New Car Launches" />
-                      <NewsList 
-                        articles={CAR_LAUNCH_DATA}
-                        onArticleClick={handleArticleClick}
-                      />
+                  /* === CATEGORY LAYOUT === */
+                  <div>
+                     {/* Category Banner */}
+                     <div className="border-b-4 border-brand-red mb-8 pb-2 mt-2">
+                        <div className="flex items-end gap-4">
+                            <h1 className="text-4xl md:text-6xl font-black font-serif text-gray-900 uppercase tracking-tighter leading-none">
+                                {activeCategory}
+                            </h1>
+                            <span className="hidden md:inline-block text-brand-red font-bold text-lg pb-1.5 mb-0.5">/ News & Reviews</span>
+                        </div>
+                        <p className="text-gray-500 font-sans font-bold text-xs md:text-sm mt-2 uppercase tracking-widest">
+                            Top stories, expert reviews, and market analysis for {activeCategory}
+                        </p>
                     </div>
 
-                    {/* Right: New Bike Launch */}
-                    <div>
-                      <SectionHeader title="New Bike Launches" />
-                      <NewsList 
-                        articles={BIKE_LAUNCH_DATA}
-                        onArticleClick={handleArticleClick}
-                      />
-                    </div>
-                  </section>
-                </div>
+                    <div className="flex flex-col lg:flex-row lg:space-x-10">
+                      {/* Left Col - Main Feed (List View distinct from Home Grid) */}
+                      <div className="w-full lg:w-2/3">
+                          {heroArticle && (
+                              <div className="mb-10">
+                                <HeroSection article={heroArticle} onClick={handleArticleClick} />
+                              </div>
+                          )}
 
-                {/* === Sidebar Column (Right 25%) === */}
-                <div className="w-full lg:w-1/4 mt-10 lg:mt-0">
-                  <Sidebar 
-                    articles={sidebarArticles} 
-                    onArticleClick={handleArticleClick} 
-                  />
-                </div>
-              </div>
+                          <SectionHeader title={`Latest in ${activeCategory}`} />
+                          
+                          {/* Using List View for the entire feed gives a "Blog/Archive" feel */}
+                          <div className="mt-6">
+                             <NewsList articles={latestNewsArticles} onArticleClick={handleArticleClick} />
+                          </div>
+                      </div>
+
+                      {/* Right Col - Category Sidebar */}
+                      <div className="w-full lg:w-1/3 mt-10 lg:mt-0">
+                          <div className="sticky top-24">
+                              <SectionHeader title="Most Popular" />
+                              <Sidebar articles={trendingArticles} onArticleClick={handleArticleClick} />
+                              
+                              {/* Category Specific Widget */}
+                              <div className="mt-8 bg-gray-900 p-6 text-center text-white rounded-sm">
+                                  <h4 className="font-serif font-bold text-xl mb-2">
+                                    {isCars ? 'Find Your Dream Car' : isBikes ? 'Find Your Dream Bike' : 'Industry Insights'}
+                                  </h4>
+                                  <p className="text-xs text-gray-400 mb-4">
+                                    Compare specs, prices, and features with our advanced tools.
+                                  </p>
+                                  <button className="bg-brand-red text-white w-full text-xs font-bold uppercase py-3 hover:bg-red-700 transition-colors">
+                                    Start Search
+                                  </button>
+                              </div>
+                          </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
